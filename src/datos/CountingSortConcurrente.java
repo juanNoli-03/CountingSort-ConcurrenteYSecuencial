@@ -1,0 +1,134 @@
+package datos;
+
+//IMPORTAMOS LIBRERIAS
+import java.util.concurrent.*;
+
+public class CountingSortConcurrente {
+	
+    public static int[] countingSortConcurrente (int[] array, int cantidadHilos) {
+        
+    	//BUSCAMOS EL MAXIMO VALOR DE NUESTRO ARRAY. ESTO LO HACEMOS PARA DETERMINAR CUAL SERÁ 
+    	//EL TAMAÑO DE NUESTRO ARRAY DE CONTEO.
+    	int maximoValor = 0;
+    	
+    	for (int i = 0; i < array.length; i++) {
+    		maximoValor = Math.max(maximoValor, array[i]);
+  		}
+    	
+    	//ES SUMAMENTE IMPORTANTE ACORDARSE DE INCREMENTAR EL VALOR MAXIMO (TAMAÑO DE LOS COUNT ARRAY) EN 1. RECORDEMOS 
+    	//QUE EL COUNT ARRAY DEBE IR DESDE 0 HASTA EL NUMERO MAXIMO INCLUIDO, ES DECIR, SI NOSOTROS TENEMOS UN ARRAY QUE 
+    	//ES DEL TAMAÑO DE NUESTRO NUMERO MAXIMO, Y NUESTRO NUMERO MAXIMO ES EL 50 (POR EJEMPO) EL ARRAY VA A IR DESDE EL O 
+    	//HASTA EL 49, ES DECIR 0 - 49. POR ESTA RAZON, EL NUMERO MAXIMO SE DEBE INCREMENTAR EN 1, YA QUE SI O SI EL NUMERO 
+    	//MAXMO DEBE ESTAR DISPONIBLE COMO POSICION, PARA PODER ALLI, CONTAR SU FRECUENCIA. POR ENDE, SI INCREMENTAMOS EN 1
+    	//EL VALOR MAXIMO, SIGUIENDO EL EJEMPLO, NUESTRO ARRAY SERIA DE 51 POSICIONES, ES DECIR, 0 - 50, INCLUYENDO EL VALOR 
+    	//MAXIMO PARA PODER CONTAR SU FRECUENCIA EN DICHA POSICION.
+    	    	
+    	//DEFINIMOS EL TAMAÑO DEL ARRAY PASADO POR PARAMETRO.
+        int tamañoArray = array.length;
+        
+        //CREAMOS UNA PILETA DE HILOS!!!
+        ExecutorService executor = Executors.newFixedThreadPool(cantidadHilos);
+        
+        //AHORA BIEN? COMO LOGRAMOS LA CONCURRENCIA EN ESTE ALGORITMO?
+        //LA CONCURRENCIA LA VAMOS A PODER LOGRAR HACIENDO QUE LOS HILOS TRABAJEN EN DISTINTAS REGIONES 
+        //DE NUESTRO ARRAY ORIGINAL Y VAYAN CONTANDO LA CANTIDAD DE APARICIONES DE LOS NUMEROS EN UN COUNT 
+        //ARRAY PARCIAL, QUE BASICAMENTE VA A SER UNA MATRIZ. CADA UNA DE LAS COLUMNAS CORRESPONDE A UN HILO Y, 
+        //LOS RENGLONES REPRESENTAN LOS VALORES DEL ARRAY ORIGINAL. EL VALOR DE CADA RENGLON REPRESENTARIA LA 
+        //CANTIDAD DE APARICIONES DE ESE VALOR EN EL ARRAY PASADO POR PARAMETRO.
+        //EJEMPLO:
+        //COL ----->                 HILO 1           HILO2          HILO3
+        //REN 0----->    VALOR 0-    FREC             FREC           FREC
+        //REN 1----->    VALOR 1-    FREC             FREC           FREC
+        //IMPORTANTE INCREMENTAR EL MAXIMO VALOR.
+        int[][] matrizConteo = new int[cantidadHilos][maximoValor + 1]; 
+        
+        //OBTENEMOS LA CANTIDAD DE ELEMENTOS POR HILO
+        int elementosPorHilo = tamañoArray / cantidadHilos; 
+		
+        //CONCURRENCIA!!
+		//--------------------------------------------------------------------------------------------------
+        for (int i = 0; i < cantidadHilos; i++) {
+            
+        	//INICIO DE LA REGION DEL ARRAY CONTEMPLADA POR EL HILO
+        	int inicioRegion = i * elementosPorHilo; 
+        	
+        	//FINAL DE LA REGION DEL ARRAY CONTEMPLADA POR EL HILO
+            int finalRegion = Math.min(inicioRegion + elementosPorHilo, tamañoArray); 
+       
+            //DEFINIMOS UN INDICE QUE NOS VA A IR CORRIENDO ENTRE LOS HILOS.
+            final int numeroHilo = i;
+            
+            //EL EXECUTOR ENVIA UNA TAREA Y SE LA ASIGNA A UNO DE LOS HILOS DE LA PILETA. SI HAY
+            //VARIOS HILOS EN LA MISMA, LAS TAREAS SE VAN A EJECUTAR DE MANERA PARALELA. CADA HILO
+            //VA A TRABAJAR EN SU REGION Y VA A REALIZAR EL CONTEO EN EL COUNT ARRAY EN SU RESPECTIVA
+            //COLUMNA. DE ESTA MANERA EVITAMOS PROBLEMAS DE REGION CRITICA.
+            executor.execute(() -> {
+                for (int j = inicioRegion; j < finalRegion; j++) {
+                	
+                	matrizConteo[numeroHilo][array[j]]++; //ASIGNAMOS CANTIDAD DE APARICIONES.
+                }
+            });
+        }
+        
+        //COMO YA ASIGNAMOS TODAS LAS TAREAS QUE DEBIAMOS ASIGNAR, LE DECIMOS AL EXECUTOR QUE 
+        //NO ACEPTE MAS TAREAS, PERO, QUE COMPLETE LAS QUE SE ESTAN REALIZANDO.
+        executor.shutdown();
+        
+        try {
+        	//ESPERAMOS A QUE TODOS LOS HILOS FINALICEN
+            executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    	//--------------------------------------------------------------------------------------------------
+        
+        
+        //UNA VEZ QUE TERMINAMOS CON LA CONCURRRENCIA, LOS HILOS YA HABRAN CONTADO LA CANTIDAD DE APARCIONES 
+        //DE CADA UNO DE LOS NUMEROS Y LAS HABRAN ACUMULADO DENTRO DEL LA MATRIZ DE CONTEO QUE HABIAMOS DEFINIDO. 
+        //TODAS ESAS CANTIDADES, DEBEMOS ACUMULARLAS EN UN SOLO ARRAY DE CONTEO GENERAL.
+        int[] countArrayFinal = new int[maximoValor + 1];
+        
+        for (int i = 0; i < cantidadHilos; i++) { 
+            
+        	for (int j = 0; j <= maximoValor; j++) {
+                
+        		countArrayFinal[j] += matrizConteo[i][j];
+        	}
+        }
+		
+        //ORDENAMIENTO FINAL!!!
+     
+        //CREAMOS UN ARRAY DONDE VAMOS A GUARDAR EL ORDENAMIENTO FINAL.
+        int[] arrayOrdenado = new int[tamañoArray];
+        
+        //CREAMOS UN INDEX QUE NOS VA A AYUDAR PARA IR MOVIENDONOS DENTRO DE NUESTRO ARRRAY ORDENADO.
+        int index = 0;
+        
+        //ESTE ULTIMO PASO, ES UN POCO DISTINTO AL ULTIMO PASO DE CUALQUIER COUNTING SORT QUE BUSQUEN EN GOOGLE. LA REALIDAD ES 
+        //QUE ES MAS SENCILLO DE ENTENDER, POR ESO LO IMPLEMEMENTÉ. EL FUNCIONAMIENTO ES EL SIGUIENTE: EN PRIMER LUGAR DEBEMOS TENER
+        //EN CUENTA QUE CADA UNA DE LAS POSICIONES REPRESENTAN CADA UNO DE LOS NUMEROS DEL ARRAY PASADO POR PARAMETRO Y SU VALOR, LA
+        //CANTIDAD DE APARICIONES DE LOS MISMOS. DICHO ESTO, NOS PARAMOS EN NUESTRO COUNT ARRAY EN LA POSICION DONDE NOS DICE EL
+        //NUMERO. SUPONGAMOS QUE ES LA POSICION 1. PRIMERO PREGUNTAMOS SI LA CANTIDAD DE APARICIONES DE LA POSICION EN LA QUE NOS 
+        //ENCONTRAMOS ES MAYOR A 0. SI ES MAYOR A 0, QUIERE DECIR QUE EL NUMERO/POSICION ESTABA PRESENTE EN NUESTRO ARRAY QUE PASAMOS 
+        //POR PARAMETRO, POR ENDE, DEBEMOS GUARDARLO EN NUESTRO ARRAY ORDENADO. VAMOS A NUESTRO ARRAY ORDENADO Y EN LA  POSICION DONDE 
+        //NOS DICE EL INDEX, GUARDAMOS AL NUMERO. LUEGO AUMENTAMOS EL INDEX, PARA PASAR A LA SIGUIENTE POSICION DEL ARAY ORDENADO Y  
+        //DISMINUIMOS LA CANTIDAD DE APARICIONES DEL COUNT ARRAY EN LA POSICION EN LA QUE ESTEMOS (YA QUE GUARDAMOS AL NUMERO DENTRO 
+        //DE  NUESTRO ARRAY ORDENADO) Y VOLVEMOS A PREGUNTAR SI LA FRECUENCIA ES MAYOR A 0. SI ES MAYOR A 0, ESO QUIERE DECIR QUE EL 
+        //NUMERO APARECIÓ 2 VECES O MAS, POR ENDE, LO VOLVEMOS A GUARDAR DENTRO DEL ARRAY ORDENADO PERO ESTA VEZ, EN LA POSICION 
+        //SIGUIENTE. EN EL CASO DE QUE NO HAYA APARECIDO MAS DE UNA VEZ, EL NUMERO CAMBIA Y VAMOS A NUESTRO COUNT ARRAY A EVALUAR LA 
+        //CANTIDAD DE APARICIONES DEL SIGUIENTE NUMERO/POSICION. ESTO SE REPITE HASTA LLEGAR AL NUMERO/POSICION FINAL DEL COUNT ARRAY.
+        for (int numero = 0; numero <= maximoValor; numero++) {
+            
+        	while (countArrayFinal[numero] > 0) {
+               
+        		arrayOrdenado[index] = numero; //GUARDAMOS AL NUMERO EN EL ARRAY ORDENADO.
+                
+        		index ++; //INCREMENTAMOS EL INDEX (NOS MOVEMOS A LA POS SIGUIENTE DEL ARRAY ORDENADO).
+                
+        		countArrayFinal[numero]--; //DECREMENTAMOS CANTIDAD DE APARICIONES DEL NUMERO ENCONTRADO.
+            }
+        }
+       
+        return arrayOrdenado; //RETORNAMOS EL ARRAY FINALMENTE ORDENADO.
+    } 
+}
